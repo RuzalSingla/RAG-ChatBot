@@ -4,6 +4,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# works both locally (.env) and on Streamlit Cloud (secrets)
+PINECONE_API_KEY = st.secrets.get("PINECONE_API_KEY") or os.environ.get("PINECONE_API_KEY")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+PINECONE_INDEX_NAME = st.secrets.get("PINECONE_INDEX_NAME") or os.environ.get("PINECONE_INDEX_NAME", "sampleindex")
+
 from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -13,22 +18,21 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 st.title("Chatbot")
 
 # initialize pinecone
-pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-index_name = "sampleindex"
-index = pc.Index(index_name)
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(PINECONE_INDEX_NAME)
 
 # initialize embeddings model + vector store
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 vector_store = PineconeVectorStore(index=index, embedding=embeddings)
 
 # initialize llm
-llm = ChatGroq(model="llama-3.1-8b-instant", api_key=os.environ.get("GROQ_API_KEY"))
+llm = ChatGroq(model="llama-3.1-8b-instant", api_key=GROQ_API_KEY)
 
-# initialize chat history (no system message yet — added dynamically per query)
+# initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# display chat history (skip SystemMessages — they're internal)
+# display chat history
 for message in st.session_state.messages:
     if isinstance(message, HumanMessage):
         with st.chat_message("user"):
@@ -54,7 +58,7 @@ if prompt:
     docs = retriever.invoke(prompt)
     docs_text = "".join(d.page_content for d in docs)
 
-    # build system prompt with fresh context
+    # build system prompt with context
     system_prompt = """You are an assistant for question-answering tasks. 
 Use the following pieces of retrieved context to answer the question. 
 If you don't know the answer, just say that you don't know. 
@@ -62,8 +66,6 @@ Use three sentences maximum and keep the answer concise.
 Context: {context}"""
 
     system_prompt_fmt = system_prompt.format(context=docs_text)
-
-    # place system message at the front, don't append it to history
     messages_to_send = [SystemMessage(system_prompt_fmt)] + st.session_state.messages
 
     # get response

@@ -1,6 +1,8 @@
 # 🤖 RAG ChatBot
 <img width="1068" height="823" alt="image" src="https://github.com/user-attachments/assets/3ee44c96-6917-48fc-9438-9901b4e2630f" />
 
+Deployed Link : https://ragchatbot-ruzal.streamlit.app/
+
 
 A Retrieval-Augmented Generation (RAG) chatbot built with LangChain, Pinecone, and Groq. The chatbot answers questions based on documents stored in a Pinecone vector database, using free and open-source tools.
 

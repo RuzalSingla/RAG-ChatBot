@@ -8,19 +8,19 @@ from pinecone import Pinecone, ServerlessSpec
 
 # import langchain
 from langchain_pinecone import PineconeVectorStore
-from langchain_openai import OpenAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-#documents
+# documents
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-load_dotenv() 
+load_dotenv()
 
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
 
 # initialize pinecone database
-index_name = os.environ.get("PINECONE_INDEX_NAME")  # change if desired
+index_name = os.environ.get("PINECONE_INDEX_NAME")
 
 # check whether index exists, and create if not
 existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
@@ -28,7 +28,7 @@ existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
 if index_name not in existing_indexes:
     pc.create_index(
         name=index_name,
-        dimension=3072,
+        dimension=384,          # 👈 changed from 3072 to 384 for HuggingFace
         metric="cosine",
         spec=ServerlessSpec(cloud="aws", region="us-east-1"),
     )
@@ -38,15 +38,14 @@ if index_name not in existing_indexes:
 index = pc.Index(index_name)
 
 # initialize embeddings model + vector store
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large",api_key=os.environ.get("OPENAI_API_KEY"))
-
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")  # 👈 free, no API key needed
 vector_store = PineconeVectorStore(index=index, embedding=embeddings)
 
-
-# loading the PDF document
+# loading the PDF documents
 loader = PyPDFDirectoryLoader("documents/")
-
 raw_documents = loader.load()
+
+print(f"Loaded {len(raw_documents)} pages from PDFs")
 
 # splitting the document
 text_splitter = RecursiveCharacterTextSplitter(
@@ -59,17 +58,12 @@ text_splitter = RecursiveCharacterTextSplitter(
 # creating the chunks
 documents = text_splitter.split_documents(raw_documents)
 
-# generate unique id's
+print(f"Split into {len(documents)} chunks")
 
-i = 0
-uuids = []
-
-while i < len(documents):
-
-    i += 1
-
-    uuids.append(f"id{i}")
+# generate unique ids
+uuids = [f"id{i+1}" for i in range(len(documents))]
 
 # add to database
-
 vector_store.add_documents(documents=documents, ids=uuids)
+
+print("Documents added successfully!")

@@ -3,12 +3,11 @@ import os
 from dotenv import load_dotenv
 
 # import pinecone
-from pinecone import Pinecone, ServerlessSpec
+from pinecone import Pinecone
 
 # import langchain
 from langchain_pinecone import PineconeVectorStore
-from langchain_openai import OpenAIEmbeddings
-from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
 
 load_dotenv()
 
@@ -16,42 +15,40 @@ load_dotenv()
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
 
 # set the pinecone index
-
-index_name = "sample-index"
+index_name = "sampleindex"
 index = pc.Index(index_name)
 
 # initialize embeddings model + vector store
-
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large",api_key=os.environ.get("OPENAI_API_KEY"))
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 vector_store = PineconeVectorStore(index=index, embedding=embeddings)
 
-# retrieval
-'''
 
-###### add docs to db ##############################
+# ---- METHOD 1: Similarity Search with Score ----
+print("=== SIMILARITY SEARCH WITH SCORE ===")
+
 results = vector_store.similarity_search_with_score(
     "what did you have for breakfast?",
-    #k=2,
+    k=2,
     filter={"source": "tweet"},
 )
 
-print("RESULTS:")
+for res, score in results:
+    print(f"* {res.page_content} [{res.metadata}] -- Score: {score}")
 
-for res in results:
-    print(f"* {res[0].page_content} [{res[0].metadata}] -- {res[1]}")
 
-'''
+# ---- METHOD 2: Retriever with Score Threshold ----
+print("\n=== RETRIEVER WITH SCORE THRESHOLD ===")
 
 retriever = vector_store.as_retriever(
     search_type="similarity_score_threshold",
-    search_kwargs={"k": 5, "score_threshold": 0.6},
+    search_kwargs={
+        "k": 5,
+        "score_threshold": 0.6,
+        "filter": {"source": "tweet"}
+    },
 )
-results = retriever.invoke("what did you have for breakfast?")
 
-print("RESULTS:")
+results = retriever.invoke("what did you have for breakfast?")
 
 for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
-
-#'''
-

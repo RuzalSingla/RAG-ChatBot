@@ -1,39 +1,34 @@
-#import streamlit
 import streamlit as st
 import os
 from dotenv import load_dotenv
 
-# import pinecone
-from pinecone import Pinecone, ServerlessSpec
-
-# import langchain
-from langchain_pinecone import PineconeVectorStore
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-
 load_dotenv()
+
+from pinecone import Pinecone
+from langchain_pinecone import PineconeVectorStore
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 st.title("Chatbot")
 
-# initialize pinecone database
+# initialize pinecone
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-
-# initialize pinecone database
-index_name = os.environ.get("PINECONE_INDEX_NAME")  # change if desired
+index_name = "sampleindex"
 index = pc.Index(index_name)
 
 # initialize embeddings model + vector store
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large",api_key=os.environ.get("OPENAI_API_KEY"))
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 vector_store = PineconeVectorStore(index=index, embedding=embeddings)
 
-# initialize chat history
+# initialize llm
+llm = ChatGroq(model="llama-3.1-8b-instant", api_key=os.environ.get("GROQ_API_KEY"))
+
+# initialize chat history (no system message yet — added dynamically per query)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-    st.session_state.messages.append(SystemMessage("You are an assistant for question-answering tasks. "))
-
-# display chat messages from history on app rerun
+# display chat history (skip SystemMessages — they're internal)
 for message in st.session_state.messages:
     if isinstance(message, HumanMessage):
         with st.chat_message("user"):
@@ -42,56 +37,39 @@ for message in st.session_state.messages:
         with st.chat_message("assistant"):
             st.markdown(message.content)
 
-# create the bar where we can type messages
-prompt = st.chat_input("How are you?")
+# chat input
+prompt = st.chat_input("Ask me anything!")
 
-# did the user submit a prompt?
 if prompt:
-
-    # add the message from the user (prompt) to the screen with streamlit
     with st.chat_message("user"):
         st.markdown(prompt)
 
-        st.session_state.messages.append(HumanMessage(prompt))
+    st.session_state.messages.append(HumanMessage(prompt))
 
-    # initialize the llm
-    llm = ChatOpenAI(
-        model="gpt-4o",
-        temperature=1
-    )
-
-    # creating and invoking the retriever
+    # retrieve relevant docs
     retriever = vector_store.as_retriever(
         search_type="similarity_score_threshold",
         search_kwargs={"k": 3, "score_threshold": 0.5},
     )
-
     docs = retriever.invoke(prompt)
     docs_text = "".join(d.page_content for d in docs)
 
-    # creating the system prompt
+    # build system prompt with fresh context
     system_prompt = """You are an assistant for question-answering tasks. 
-    Use the following pieces of retrieved context to answer the question. 
-    If you don't know the answer, just say that you don't know. 
-    Use three sentences maximum and keep the answer concise.
-    Context: {context}:"""
+Use the following pieces of retrieved context to answer the question. 
+If you don't know the answer, just say that you don't know. 
+Use three sentences maximum and keep the answer concise.
+Context: {context}"""
 
-    # Populate the system prompt with the retrieved context
     system_prompt_fmt = system_prompt.format(context=docs_text)
 
+    # place system message at the front, don't append it to history
+    messages_to_send = [SystemMessage(system_prompt_fmt)] + st.session_state.messages
 
-    print("-- SYS PROMPT --")
-    print(system_prompt_fmt)
+    # get response
+    result = llm.invoke(messages_to_send).content
 
-    # adding the system prompt to the message history
-    st.session_state.messages.append(SystemMessage(system_prompt_fmt))
-
-    # invoking the llm
-    result = llm.invoke(st.session_state.messages).content
-
-    # adding the response from the llm to the screen (and chat)
     with st.chat_message("assistant"):
         st.markdown(result)
 
-        st.session_state.messages.append(AIMessage(result))
-
+    st.session_state.messages.append(AIMessage(result))

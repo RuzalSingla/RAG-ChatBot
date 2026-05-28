@@ -3,12 +3,11 @@ import os
 from dotenv import load_dotenv
 
 # import pinecone
-from pinecone import Pinecone, ServerlessSpec
+from pinecone import Pinecone
 
 # import langchain
 from langchain_pinecone import PineconeVectorStore
-from langchain_openai import OpenAIEmbeddings
-from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
 
 load_dotenv()
 
@@ -16,13 +15,11 @@ load_dotenv()
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
 
 # set the pinecone index
-
-index_name = os.environ.get("PINECONE_INDEX_NAME") 
+index_name = os.environ.get("PINECONE_INDEX_NAME")
 index = pc.Index(index_name)
 
 # initialize embeddings model + vector store
-
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large",api_key=os.environ.get("OPENAI_API_KEY"))
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 vector_store = PineconeVectorStore(index=index, embedding=embeddings)
 
 # retrieval
